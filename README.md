@@ -4,7 +4,6 @@ AI Recruiter is a full-stack voice interview platform that uses OpenRouter's Gem
 
 🌐 Live Site → [ai-recruiter-one.vercel.app](https://ai-recruiter-one.vercel.app)
 
----
 
 ## 🚀 Quick Start (Local)
 
@@ -19,7 +18,17 @@ cp .env.local.example .env.local
 pnpm dev              # http://localhost:3000
 ```
 
----
+## 🏗️ Tech Stack
+
+| Layer            | What & Why                                             |
+| ---------------- | ------------------------------------------------------ |
+| **Frontend**     | Next.js 14 (App Router) + React 19 + Tailwind CSS      |
+| **Voice AI**     | [Vapi](https://vapi.ai) – Web SDK 2.2 (TTS + ASR + call control) |
+| **LLM**          | Google Gemini 2.5 Pro (via OpenRouter)                 |
+| **Database**     | Supabase (PostgreSQL + RLS)                            |
+| **Auth**         | Supabase OAuth (Google)                                |
+| **Hosting**      | Vercel (Serverless Functions + Edge Middleware)        |
+
 
 ## 🔐 Environment Variables
 
@@ -45,7 +54,6 @@ NEXT_PUBLIC_VAPI_ASSISTANT_ID=your_vapi_assistant_id
 
 ⚠️ Never commit real secrets — keep them in `.env.local`.
 
----
 
 ## 📁 Important Folders
 
@@ -57,17 +65,6 @@ NEXT_PUBLIC_VAPI_ASSISTANT_ID=your_vapi_assistant_id
 | `app/dashboard`                        | Protected recruiter UI                    |
 | `lib/utils.js`                         | Small helpers (date, sleep, etc.)         |
 
----
-
-## 🧭 Roadmap
-
-- 📧 Email invitations & reminders  
-- 🔍 Vector search for better follow-ups  
-- 📊 Analytics dashboard (avg score, drop-off)  
-- 🧾 PDF export of transcript & summary  
-- 💳 Stripe billing (pay-per-interview)  
-
----
 
 ## 🤝 Contributing
 
@@ -75,14 +72,11 @@ Fork the repo & create your branch
 Follow the commit-lint & Prettier rules (`pnpm lint && pnpm format`)  
 Open a PR — every improvement is welcome!
 
----
 
 ## ⚖️ License
 
 MIT
 
----
 
-© 2025 — crafted with 🧠 & 🤖 by **Saad Amin**  
-Built using OpenAI technologies & community SDKs.  
+© 2025 — crafted by **Saad Amin**  
 Not affiliated with Google, Supabase, or Vapi.
