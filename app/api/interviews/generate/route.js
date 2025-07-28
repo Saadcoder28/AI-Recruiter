@@ -86,35 +86,31 @@ export async function POST(req) {
     } = await supabase.auth.getSession();
 
     const user = session?.user;
+
     if (!user) {
       return NextResponse.json({ error: "Not signed in" }, { status: 401 });
     }
 
     const { data, error } = await supabase
-      .from("interviews")
-      .insert([
-        {
-          user_id: user.id,
-          job_title: job,
-          job_description: description,
-          duration,
-          types,
-          questions,
-        },
-      ])
-      .select("id")
-      .single();
+  .from("interviews")
+  .insert([
+    {
+      job,
+      description,
+      duration,
+      types,
+      questions,
+    },
+  ])
+  .select("id")
+  .single();
 
-    if (error || !data?.id) {
-      console.error("❌ Supabase Insert Error:", error?.message);
-      throw new Error(error?.message || "Interview creation failed");
-    }
 
-    console.log("✅ Interview created with ID:", data.id);
+    if (error) throw new Error(error.message);
 
     return NextResponse.json({ interviewId: data.id, questions });
   } catch (err) {
-    console.error("🔴 /api/interviews/generate error:", err);
+    console.error("🔴 generate route:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
