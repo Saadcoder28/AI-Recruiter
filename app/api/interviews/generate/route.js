@@ -26,10 +26,13 @@ async function callGemini(prompt) {
 
   if (!res.ok) return [];
   const data = await res.json();
-  const raw  = data.choices?.[0]?.message?.content?.trim() || "";
+  const raw = data.choices?.[0]?.message?.content?.trim() || "";
 
-  try { return JSON.parse(raw); }
-  catch { return []; }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
 }
 
 async function generateViaGemini({ job, description, types, numQuestions }) {
@@ -62,32 +65,56 @@ function fallbackQuestions(job, types, n) {
 export async function POST(req) {
   try {
     const body = await req.json();
-    const job          = body.job || body.jobTitle;
-    const description  = body.description || body.jobDescription;
-    const duration     = body.duration     ?? 30;
-    const types        = body.types        ?? ["technical"];
+    const job = body.job || body.jobTitle;
+    const description = body.description || body.jobDescription;
+    const duration = body.duration ?? 30;
+    const types = body.types ?? ["technical"];
     const numQuestions = body.numQuestions ?? 8;
 
-    const questions = await generateViaGemini({ job, description, types, numQuestions });
+    const questions = await generateViaGemini({
+      job,
+      description,
+      types,
+      numQuestions,
+    });
 
     const cookieStore = await getCookies();
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
 
-    await supabase
-      .from("interviews")
-      .insert({ job, description, duration, types, questions })
-      .throwOnError();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    const { data } = await supabase
+    const user = session?.user;
+    if (!user) {
+      return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+    }
+
+    const { data, error } = await supabase
       .from("interviews")
+      .insert([
+        {
+          user_id: user.id,
+          job_title: job,
+          job_description: description,
+          duration,
+          types,
+          questions,
+        },
+      ])
       .select("id")
-      .order("created_at", { ascending: false })
-      .limit(1)
       .single();
+
+    if (error || !data?.id) {
+      console.error("❌ Supabase Insert Error:", error?.message);
+      throw new Error(error?.message || "Interview creation failed");
+    }
+
+    console.log("✅ Interview created with ID:", data.id);
 
     return NextResponse.json({ interviewId: data.id, questions });
   } catch (err) {
-    console.error("🔴 generate route:", err);
+    console.error("🔴 /api/interviews/generate error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
