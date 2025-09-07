@@ -31,7 +31,12 @@ async function callGemini(prompt) {
   try {
     return JSON.parse(raw);
   } catch {
-    return [];
+    // Handle non-JSON responses (markdown, numbered lists, etc.)
+    const lines = raw
+      .split(/\r?\n/)
+      .map(l => l.replace(/^\d+[\.\)]?\s*/, "").trim())
+      .filter(Boolean);
+    return lines.length ? lines : [];
   }
 }
 
@@ -43,13 +48,15 @@ Job description:
 ${description}
 
 Focus on: ${types.join(", ")}
-Generate ${numQuestions} insightful questions.
-Return ONLY a JSON array of strings.
+Generate exactly ${numQuestions} insightful questions.
+Return ONLY a JSON array of strings, like: ["Question 1?", "Question 2?", ...]
   `.trim();
 
   let qs = await callGemini(prompt);
-  if (qs.length === 0) qs = fallbackQuestions(job, types, numQuestions);
-  return qs;
+  if (qs.length === 0 || qs.length < numQuestions) {
+    qs = fallbackQuestions(job, types, numQuestions);
+  }
+  return qs.slice(0, numQuestions);
 }
 
 function fallbackQuestions(job, types, n) {
@@ -57,7 +64,22 @@ function fallbackQuestions(job, types, n) {
     `What interests you about the ${job} role?`,
     `Describe a challenging ${job}-related project you worked on.`,
     `How do you keep your ${job} skills current?`,
+    `Tell me about a time you solved a difficult problem in ${job}.`,
+    `What would you do differently in your last ${job} project?`,
+    `Which technologies are you most comfortable using for ${job} tasks?`,
+    `How do you approach learning new skills in the ${job} domain?`,
+    `Can you walk me through your favorite ${job}-related project?`,
+    `What's the most innovative solution you've implemented as a ${job}?`,
+    `How do you handle tight deadlines in ${job} work?`,
+    `Describe your experience with ${types.join(" and ")} in ${job} context.`,
+    `What's your approach to collaborating with team members in ${job} projects?`
   ];
+  
+  // Generate more questions if needed
+  while (base.length < n) {
+    base.push(`Tell me about your experience with ${job} responsibilities.`);
+  }
+  
   return base.slice(0, n);
 }
 
@@ -71,12 +93,16 @@ export async function POST(req) {
     const types = body.types ?? ["technical"];
     const numQuestions = body.numQuestions ?? 8;
 
+    console.log(`Generating ${numQuestions} questions for ${job} role`);
+
     const questions = await generateViaGemini({
       job,
       description,
       types,
       numQuestions,
     });
+
+    console.log(`Generated ${questions.length} questions:`, questions);
 
     const cookieStore = await getCookies();
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
@@ -92,21 +118,26 @@ export async function POST(req) {
     }
 
     const { data, error } = await supabase
-  .from("interviews")
-  .insert([
-    {
-      job,
-      description,
-      duration,
-      types,
-      questions,
-    },
-  ])
-  .select("id")
-  .single();
+      .from("interviews")
+      .insert([
+        {
+          user_id: user.id,  // ADD THIS LINE - Associate with current user
+          job,
+          description,
+          duration,
+          types,
+          questions,
+        },
+      ])
+      .select("id")
+      .single();
 
+    if (error) {
+      console.error("Supabase insert error:", error);
+      throw new Error(error.message);
+    }
 
-    if (error) throw new Error(error.message);
+    console.log(`Interview created with ID: ${data.id}`);
 
     return NextResponse.json({ interviewId: data.id, questions });
   } catch (err) {

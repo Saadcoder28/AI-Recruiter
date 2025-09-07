@@ -10,36 +10,74 @@ export default function InterviewDetail() {
   const supabase = createClientComponentClient();
 
   const [interview, setInterview] = useState(null);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [user, setUser] = useState(null);
 
-  /* fetch one row */
+  /* fetch one row with user verification */
   useEffect(() => {
-    supabase
-      .from("interviews")
-      .select("*")
-      .eq("id", id)
-      .single()
-      .then(({ data, error }) => {
-        if (error) setError(error.message);
-        else {
-          let qs = data.questions;
-          if (typeof qs === "string") {
-            try { qs = JSON.parse(qs); }
-            catch { qs = qs.split(/\r?\n/).map(l => l.trim()).filter(Boolean); }
-          }
-          setInterview({ ...data, questions: qs });
+    async function fetchInterviewWithAuth() {
+      try {
+        // Get current user
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          throw new Error(sessionError.message);
         }
+
+        if (!session?.user) {
+          setError("Please sign in to view this interview");
+          setLoading(false);
+          return;
+        }
+
+        setUser(session.user);
+
+        // Fetch interview for this specific user only
+        const { data, error } = await supabase
+          .from("interviews")
+          .select("*")
+          .eq("id", id)
+          .eq("user_id", session.user.id) // ONLY SHOW USER'S OWN INTERVIEWS
+          .single();
+
+        if (error) {
+          setError("Interview not found or you don't have access to it");
+          setLoading(false);
+          return;
+        }
+
+        let qs = data.questions;
+        if (typeof qs === "string") {
+          try { qs = JSON.parse(qs); }
+          catch { qs = qs.split(/\r?\n/).map(l => l.trim()).filter(Boolean); }
+        }
+        
+        setInterview({ ...data, questions: qs });
         setLoading(false);
-      });
+      } catch (err) {
+        console.error("Error fetching interview:", err);
+        setError(err.message);
+        setLoading(false);
+      }
+    }
+
+    if (id) {
+      fetchInterviewWithAuth();
+    }
   }, [id, supabase]);
 
   if (loading) return <p className="p-8">Loading…</p>;
-  if (error)   return <p className="p-8 text-red-600">{error}</p>;
+  if (error) return <p className="p-8 text-red-600">{error}</p>;
 
   return (
     <div className="space-y-8 p-8">
-      <h1 className="text-3xl font-bold">{interview.job}</h1>
+      <div className="flex justify-between items-start">
+        <h1 className="text-3xl font-bold">{interview.job}</h1>
+        {user && (
+          <span className="text-sm text-gray-500">Created by: {user.email}</span>
+        )}
+      </div>
 
       <section>
         <h2 className="text-xl font-semibold mb-2">Job Description</h2>
@@ -55,19 +93,32 @@ export default function InterviewDetail() {
         </ol>
       </section>
 
-      <button
-        onClick={() => router.push(`/dashboard/interviews/${id}/link`)}
-        className="px-4 py-2 bg-sky-600 text-white rounded-lg"
-      >
-        Get interview link →
-      </button>
+      <div className="flex gap-4">
+        <button
+          onClick={() => {
+            const interviewLink = `${window.location.origin}/interview/${id}`;
+            navigator.clipboard.writeText(interviewLink);
+            alert("Interview link copied to clipboard!");
+          }}
+          className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700"
+        >
+          Copy Interview Link
+        </button>
 
-      <button
-        onClick={() => router.push("/dashboard")}
-        className="ml-4 px-4 py-2 bg-gray-200 rounded-lg"
-      >
-        ← Back to dashboard
-      </button>
+        <button
+          onClick={() => router.push(`/interview/${id}`)}
+          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+        >
+          Test Interview
+        </button>
+
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+        >
+          ← Back to Dashboard
+        </button>
+      </div>
     </div>
   );
 }
