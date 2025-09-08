@@ -25,7 +25,7 @@ export default function CandidatePage() {
   const [step, setStep] = useState("join"); // join | call | done
   const [name, setName] = useState("");
   const [timer, setTimer] = useState(0);
-  const [isStartingCall, setIsStartingCall] = useState(false); // NEW: Prevent double clicks
+  const [isStartingCall, setIsStartingCall] = useState(false);
 
   /* feedback */
   const [rating, setRating] = useState(0);
@@ -34,7 +34,7 @@ export default function CandidatePage() {
 
   const timerRef = useRef(null);
   const qRef = useRef(0);
-  const callStarted = useRef(false); // NEW: Track call state
+  const callStarted = useRef(false);
 
   /* ─ fetch interview row ─ */
   useEffect(() => {
@@ -77,14 +77,13 @@ export default function CandidatePage() {
     }
   };
 
-  /* ─ start Vapi call - FIXED VERSION ─ */
+  /* ─ start Vapi call - IMPROVED RELIABLE VERSION ─ */
   async function startCall() {
     if (!name.trim()) {
       setError("Please enter your name");
       return;
     }
 
-    // PREVENT DOUBLE CLICKS
     if (isStartingCall || callStarted.current) {
       console.log("Call already starting or started");
       return;
@@ -95,17 +94,40 @@ export default function CandidatePage() {
       return;
     }
 
+    // Check if Vapi keys are available
+    if (!process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || !process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID) {
+      setError("Voice interview not configured. Please contact support.");
+      return;
+    }
+
     setIsStartingCall(true);
     setError("");
     console.log("Starting call...");
 
+    // Set timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (isStartingCall) {
+        setError("Connection timeout. Please check your microphone permissions and try again.");
+        setIsStartingCall(false);
+        callStarted.current = false;
+      }
+    }, 15000); // 15 second timeout
+
     const onCallStart = async () => {
       console.log("Call started event received");
+      clearTimeout(timeoutId);
       vapi.off("call-start", onCallStart);
       callStarted.current = true;
       
       try {
-        await wait(500); // Give connection time to stabilize
+        await wait(1000); // Increased wait time for better stability
+        
+        // Check if call is still active before proceeding
+        if (!callStarted.current) {
+          console.log("Call was ended before setup completed");
+          return;
+        }
+        
         await vapi.setMuted(false);
         
         const firstQuestion = interview.questions[0];
@@ -118,14 +140,27 @@ export default function CandidatePage() {
         setIsStartingCall(false);
       } catch (err) {
         console.error("Error in call start handler:", err);
-        setError("Failed to start interview properly");
+        setError("Failed to start interview properly. Please try again.");
         setIsStartingCall(false);
+        callStarted.current = false;
       }
     };
 
     const onCallError = (e) => {
       console.error("Call error:", e);
-      setError(e?.message || "Voice call failed");
+      clearTimeout(timeoutId);
+      
+      // More specific error messages
+      let errorMessage = "Voice connection failed.";
+      if (e.message.includes("microphone")) {
+        errorMessage = "Microphone access denied. Please allow microphone access and try again.";
+      } else if (e.message.includes("network")) {
+        errorMessage = "Network connection issue. Please check your internet and try again.";
+      } else if (e.message.includes("permission")) {
+        errorMessage = "Please allow microphone permissions in your browser and try again.";
+      }
+      
+      setError(errorMessage);
       setIsStartingCall(false);
       callStarted.current = false;
       vapi.off("call-start", onCallStart);
@@ -136,12 +171,25 @@ export default function CandidatePage() {
     vapi.on("error", onCallError);
 
     try {
+      console.log("Attempting to start Vapi with assistant ID:", ASSISTANT_ID);
       await vapi.start(ASSISTANT_ID);
     } catch (e) {
       console.error("Failed to start call:", e);
+      clearTimeout(timeoutId);
       vapi.off("call-start", onCallStart);
       vapi.off("error", onCallError);
-      setError(e?.message || "Could not start interview");
+      
+      // More specific error messages
+      if (e.message.includes("microphone")) {
+        setError("Microphone access denied. Please allow microphone access and refresh the page.");
+      } else if (e.message.includes("network")) {
+        setError("Network connection issue. Please check your internet connection.");
+      } else if (e.message.includes("assistant")) {
+        setError("Voice assistant not available. Please contact support.");
+      } else {
+        setError("Could not start voice interview. Please refresh the page and try again.");
+      }
+      
       setIsStartingCall(false);
       callStarted.current = false;
     }
@@ -178,7 +226,7 @@ export default function CandidatePage() {
       console.log("Call ended");
       stopTimer();
       setStep("done");
-      callStarted.current = false; // RESET CALL STATE
+      callStarted.current = false;
       setIsStartingCall(false);
     };
 
@@ -306,15 +354,6 @@ export default function CandidatePage() {
               <p>{name}</p>
             </div>
           </div>
-        </div>
-
-        <div className="text-center bg-gray-50 p-3 rounded">
-          <p className="text-sm text-gray-600">
-            Question {qRef.current + 1} of {interview?.questions?.length || 0}
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            Speak your answer and wait for the next question
-          </p>
         </div>
 
         <div className="flex justify-end"><Clock /></div>
